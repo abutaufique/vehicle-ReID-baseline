@@ -105,7 +105,7 @@ class ResNet(nn.Module):
 
     def __init__(self, loss, block, layers,
                  num_classes = 0,
-                 last_stride=2,
+                 last_stride=1,
                  fc_dims=None,
                  dropout_p=None,
                  **kwargs):
@@ -120,7 +120,7 @@ class ResNet(nn.Module):
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.layer1 = self._make_layer(block, 64, layers[0])
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=1)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=last_stride)
 
         self.global_avgpool = nn.AdaptiveAvgPool2d(1)

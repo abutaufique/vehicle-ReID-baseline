@@ -3,7 +3,7 @@ python train_xent_tri.py \
     -s veri \
     -t veri \
     --root /localscratch \
-    --height 128 \
+    --height 256 \
     --width 256 \
     --optim amsgrad \
     --lr 0.0003 \

@@ -152,7 +152,7 @@ def _partloss(criterion, outputs, targets):
 
 
 def train(epoch, model, criterion_xent, criterion_htri, optimizer, trainloader, use_gpu):
-    xent_losses = AverageMeter()
+    xent_losses = averagemeter()
     htri_losses = AverageMeter()
     partlosses = AverageMeter()
     accs = AverageMeter()
@@ -232,7 +232,7 @@ def test(model, queryloader, galleryloader, use_gpu, ranks=[1, 5, 10, 20], retur
             end = time.time()
             _output = model(imgs)
             batch_time.update(time.time() - end)
-            _, _, features = _output
+            _, features, _ = _output
             features = features.data.cpu()
             qf.append(features)
             q_pids.extend(pids)
@@ -252,7 +252,7 @@ def test(model, queryloader, galleryloader, use_gpu, ranks=[1, 5, 10, 20], retur
             _output = model(imgs)
             batch_time.update(time.time() - end)
 
-            _, _, features = _output
+            _, features, _ = _output
             features = features.data.cpu()
             gf.append(features)
             g_pids.extend(pids)

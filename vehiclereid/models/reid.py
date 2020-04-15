@@ -51,8 +51,8 @@ class PCBModel(nn.Module):
       linear_do_cfg=[],
       last_conv_stride=1,
       last_conv_dilation=1,
-      num_stripes=6,
-      num_features=256,
+      num_stripes=8,
+      num_features=512,
       num_classes=9):
     super(PCBModel, self).__init__()
 
@@ -63,7 +63,7 @@ class PCBModel(nn.Module):
     self.local_conv_list = nn.ModuleList()
     for _ in range(num_stripes):
       self.local_conv_list.append(nn.Sequential(
-        nn.Conv2d(512, num_features, 1),
+        nn.Conv2d(2048, num_features, 1),
         nn.BatchNorm2d(num_features),
         nn.ReLU(inplace=True)
       ))
@@ -114,12 +114,10 @@ class PCBModel(nn.Module):
         all_feat, cls_feat = x
     else:
         all_feat, flat_feat = x
-
-    x = all_feat[1]
+    x = all_feat[3]
     if self.blocks:
         x = self.block_modules(x)
-
-    x = x.chunk(6, 3)
+    x = x.chunk(8, 2)
     local_feat_list = []
     logits_list = []
     for i in range(self.num_stripes):
