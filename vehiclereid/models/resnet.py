@@ -103,7 +103,8 @@ class ResNet(nn.Module):
     He et al. Deep Residual Learning for Image Recognition. CVPR 2016.
     """
 
-    def __init__(self, num_classes, loss, block, layers,
+    def __init__(self, loss, block, layers,
+                 num_classes = 0,
                  last_stride=2,
                  fc_dims=None,
                  dropout_p=None,
@@ -112,7 +113,6 @@ class ResNet(nn.Module):
         super(ResNet, self).__init__()
         self.loss = loss
         self.feature_dim = 512 * block.expansion
-
         # backbone network
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
@@ -125,7 +125,8 @@ class ResNet(nn.Module):
 
         self.global_avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = self._construct_fc_layer(fc_dims, 512 * block.expansion, dropout_p)
-        self.classifier = nn.Linear(self.feature_dim, num_classes)
+        if num_classes:
+            self.classifier = nn.Linear(self.feature_dim, num_classes)
 
         self._init_params()
 
@@ -192,18 +193,25 @@ class ResNet(nn.Module):
                     nn.init.constant_(m.bias, 0)
 
     def featuremaps(self, x):
+        all_feat = []
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
         x = self.layer1(x)
+        all_feat.append(x)
         x = self.layer2(x)
+        all_feat.append(x)
         x = self.layer3(x)
+        all_feat.append(x)
         x = self.layer4(x)
-        return x
+        all_feat.append(x)
+        return all_feat
 
     def forward(self, x):
-        f = self.featuremaps(x)
+        all_feat = self.featuremaps(x)
+
+        f = all_feat[-1]
         v = self.global_avgpool(f)
         v = v.view(v.size(0), -1)
 
@@ -211,14 +219,14 @@ class ResNet(nn.Module):
             v = self.fc(v)
 
         if not self.training:
-            return v
+            return all_feat, v
 
         y = self.classifier(v)
 
         if self.loss == {'xent'}:
-            return y
+            return all_feat, y
         elif self.loss == {'xent', 'htri'}:
-            return y, v
+            return all_feat, y, v
         else:
             raise KeyError("Unsupported loss: {}".format(self.loss))
 
@@ -247,13 +255,13 @@ resnet152: block=Bottleneck, layers=[3, 8, 36, 3]
 """
 
 
-def resnet50(num_classes, loss={'xent'}, pretrained=True, **kwargs):
+def resnet50(loss={'xent'}, pretrained=True, num_classes=0, **kwargs):
     model = ResNet(
-        num_classes=num_classes,
         loss=loss,
         block=Bottleneck,
         layers=[3, 4, 6, 3],
         last_stride=2,
+        num_classes=num_classes,
         fc_dims=None,
         dropout_p=None,
         **kwargs
@@ -263,12 +271,12 @@ def resnet50(num_classes, loss={'xent'}, pretrained=True, **kwargs):
     return model
 
 
-def resnet50_fc512(num_classes, loss={'xent'}, pretrained=True, **kwargs):
+def resnet50_fc512(loss={'xent'}, pretrained=True, num_classes=0, **kwargs):
     model = ResNet(
-        num_classes=num_classes,
         loss=loss,
         block=Bottleneck,
         layers=[3, 4, 6, 3],
+        num_classes=num_classes,
         last_stride=1,
         fc_dims=[512],
         dropout_p=None,

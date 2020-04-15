@@ -119,7 +119,7 @@ def argument_parser():
                         help='evaluation frequency (set to -1 to test only in the end)')
     parser.add_argument('--start-eval', type=int, default=0,
                         help='start to evaluate after a specific epoch')
-    parser.add_argument('--test_size', type=int, default=800,
+    parser.add_argument('--test-size', type=int, default=800,
                         help='test-size for vehicleID dataset, choices=[800,1600,2400]')
     parser.add_argument('--query-remove', type=bool, default=True)
     # ************************************************************

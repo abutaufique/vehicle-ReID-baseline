@@ -3,6 +3,7 @@ from __future__ import print_function
 from __future__ import division
 
 import numpy as np
+import pdb
 
 
 def eval_vehicleid(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
@@ -23,7 +24,6 @@ def eval_vehicleid(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
     all_cmc = []
     all_AP = []
     num_valid_q = 0.  # number of valid query
-
     for q_idx in range(num_q):
         # get query pid and camid
         # remove gallery samples that have the same pid and camid with query
@@ -55,7 +55,6 @@ def eval_vehicleid(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
         tmp_cmc = np.asarray(tmp_cmc) * raw_cmc
         AP = tmp_cmc.sum() / num_rel
         all_AP.append(AP)
-
     assert num_valid_q > 0, 'Error: all query identities do not appear in gallery'
 
     all_cmc = np.asarray(all_cmc).astype(np.float32)
@@ -82,7 +81,6 @@ def eval_veri(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
     all_cmc = []
     all_AP = []
     num_valid_q = 0.  # number of valid query
-
     for q_idx in range(num_q):
         # get query pid and camid
         q_pid = q_pids[q_idx]
@@ -95,6 +93,7 @@ def eval_veri(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
 
         # compute cmc curve
         raw_cmc = matches[q_idx][keep]  # binary vector, positions with value 1 are correct matches
+
         if not np.any(raw_cmc):
             # this condition is true when query identity does not appear in gallery
             continue
@@ -113,7 +112,6 @@ def eval_veri(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
         tmp_cmc = np.asarray(tmp_cmc) * raw_cmc
         AP = tmp_cmc.sum() / num_rel
         all_AP.append(AP)
-
     assert num_valid_q > 0, 'Error: all query identities do not appear in gallery'
 
     all_cmc = np.asarray(all_cmc).astype(np.float32)

@@ -20,7 +20,7 @@ class VeRi(BaseImageDataset):
     # identities: 776 vehicles(576 for training and 200 for testing)
     # images: 37778 (train) + 11579 (query)
     """
-    dataset_dir = 'VeRi'
+    dataset_dir = 'veri'
 
     def __init__(self, root='datasets', verbose=True, **kwargs):
         super(VeRi, self).__init__(root)
@@ -59,9 +59,9 @@ class VeRi(BaseImageDataset):
             raise RuntimeError('"{}" is not available'.format(self.gallery_dir))
 
     def process_dir(self, dir_path, relabel=False):
-        img_paths = glob.glob(osp.join(dir_path, '*.jpg'))
+        img_paths = glob.glob(osp.join(dir_path, '*.jpg')) + \
+                glob.glob(osp.join(dir_path, '*.png'))
         pattern = re.compile(r'([-\d]+)_c([-\d]+)')
-
         pid_container = set()
         for img_path in img_paths:
             pid, _ = map(int, pattern.search(img_path).groups())

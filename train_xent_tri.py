@@ -8,6 +8,7 @@ import datetime
 import os.path as osp
 import numpy as np
 import warnings
+import pdb
 
 import torch
 import torch.nn as nn
@@ -27,8 +28,9 @@ from vehiclereid.utils.generaltools import set_random_seed
 from vehiclereid.eval_metrics import evaluate
 from vehiclereid.optimizers import init_optimizer
 from vehiclereid.lr_schedulers import init_lr_scheduler
+from vehiclereid.models.modelbuilder import ModelBuilder
 
-# global variables
+global variables
 parser = argument_parser()
 args = parser.parse_args()
 
@@ -51,15 +53,17 @@ def main():
         cudnn.benchmark = True
     else:
         warnings.warn('Currently using CPU, however, GPU is highly recommended')
-
     print('Initializing image data manager')
     dm = ImageDataManager(use_gpu, **dataset_kwargs(args))
     trainloader, testloader_dict = dm.return_dataloaders()
 
     print('Initializing model: {}'.format(args.arch))
-    model = models.init_model(name=args.arch, num_classes=dm.num_train_pids, loss={'xent', 'htri'},
-                              pretrained=not args.no_pretrained, use_gpu=use_gpu)
-    print('Model size: {:.3f} M'.format(count_num_param(model)))
+    net = models.init_model(name=args.arch,loss={'xent', 'htri'},\
+                      pretrained=not args.no_pretrained,num_classes=dm.num_train_pids, use_gpu=use_gpu)
+
+    model = ModelBuilder(net, num_classes=dm.num_train_pids, loss={'xent', 'htri'})
+
+    print('Model size: {:.3f} M'.format(count_num_param(net)))
 
     if args.load_weights and check_isfile(args.load_weights):
         load_pretrained_weights(model, args.load_weights)
@@ -110,34 +114,47 @@ def main():
 
         scheduler.step()
 
-        if (epoch + 1) > args.start_eval and args.eval_freq > 0 and (epoch + 1) % args.eval_freq == 0 or (
-                epoch + 1) == args.max_epoch:
-            print('=> Test')
+        #if (epoch + 1) > args.start_eval and args.eval_freq > 0 and (epoch + 1) % args.eval_freq == 0 or (
+        #        epoch + 1) == args.max_epoch:
+        print('=> Test')
 
-            for name in args.target_names:
-                print('Evaluating {} ...'.format(name))
-                queryloader = testloader_dict[name]['query']
-                galleryloader = testloader_dict[name]['gallery']
-                rank1 = test(model, queryloader, galleryloader, use_gpu)
-                ranklogger.write(name, epoch + 1, rank1)
 
-            save_checkpoint({
-                'state_dict': model.state_dict(),
-                'rank1': rank1,
-                'epoch': epoch + 1,
-                'arch': args.arch,
-                'optimizer': optimizer.state_dict(),
-            }, args.save_dir)
+
+        for name in args.target_names:
+            print('Evaluating {} ...'.format(name))
+            queryloader = testloader_dict[name]['query']
+            galleryloader = testloader_dict[name]['gallery']
+            rank1 = test(model, queryloader, galleryloader, use_gpu)
+            ranklogger.write(name, epoch + 1, rank1)
+
+        save_checkpoint({
+            'state_dict': model.state_dict(),
+            'rank1': rank1,
+            'epoch': epoch + 1,
+            'arch': args.arch,
+            'optimizer': optimizer.state_dict(),
+        }, args.save_dir)
 
     elapsed = round(time.time() - time_start)
     elapsed = str(datetime.timedelta(seconds=elapsed))
     print('Elapsed {}'.format(elapsed))
     ranklogger.show_summary()
 
+def _partloss(criterion, outputs, targets):
+    loss0 = criterion(outputs[0],targets)
+    loss1 = criterion(outputs[1],targets)
+    loss2 = criterion(outputs[2],targets)
+    loss3 = criterion(outputs[3],targets)
+    loss4 = criterion(outputs[4],targets)
+    loss5 = criterion(outputs[5],targets)
+    partloss = loss0+loss1+loss2+loss3+loss4+loss5
+    return partloss
+
 
 def train(epoch, model, criterion_xent, criterion_htri, optimizer, trainloader, use_gpu):
     xent_losses = AverageMeter()
     htri_losses = AverageMeter()
+    partlosses = AverageMeter()
     accs = AverageMeter()
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -153,7 +170,9 @@ def train(epoch, model, criterion_xent, criterion_htri, optimizer, trainloader, 
         if use_gpu:
             imgs, pids = imgs.cuda(), pids.cuda()
 
-        outputs, features = model(imgs)
+        #outputs, features = model(imgs)
+        local_feat_list, local_logits_list, outputs, features = model(imgs)
+
         if isinstance(outputs, (tuple, list)):
             xent_loss = DeepSupervision(criterion_xent, outputs, pids)
         else:
@@ -164,7 +183,10 @@ def train(epoch, model, criterion_xent, criterion_htri, optimizer, trainloader, 
         else:
             htri_loss = criterion_htri(features, pids)
 
-        loss = args.lambda_xent * xent_loss + args.lambda_htri * htri_loss
+        partloss = _partloss(criterion_xent, local_logits_list, pids)
+
+        loss = partloss + args.lambda_xent * xent_loss + args.lambda_htri * htri_loss
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -173,6 +195,7 @@ def train(epoch, model, criterion_xent, criterion_htri, optimizer, trainloader, 
 
         xent_losses.update(xent_loss.item(), pids.size(0))
         htri_losses.update(htri_loss.item(), pids.size(0))
+        partlosses.update(partloss.item(), pids.size(0))
         accs.update(accuracy(outputs, pids)[0])
 
         if (batch_idx + 1) % args.print_freq == 0:
@@ -181,12 +204,14 @@ def train(epoch, model, criterion_xent, criterion_htri, optimizer, trainloader, 
                   'Data {data_time.val:.4f} ({data_time.avg:.4f})\t'
                   'Xent {xent.val:.4f} ({xent.avg:.4f})\t'
                   'Htri {htri.val:.4f} ({htri.avg:.4f})\t'
+                  'Partloss {ploss.val:.4f} ({ploss.avg:.4f})\t'
                   'Acc {acc.val:.2f} ({acc.avg:.2f})\t'.format(
                 epoch + 1, batch_idx + 1, len(trainloader),
                 batch_time=batch_time,
                 data_time=data_time,
                 xent=xent_losses,
                 htri=htri_losses,
+                ploss=partlosses,
                 acc=accs
             ))
 
@@ -205,9 +230,9 @@ def test(model, queryloader, galleryloader, use_gpu, ranks=[1, 5, 10, 20], retur
                 imgs = imgs.cuda()
 
             end = time.time()
-            features = model(imgs)
+            _output = model(imgs)
             batch_time.update(time.time() - end)
-
+            _, _, features = _output
             features = features.data.cpu()
             qf.append(features)
             q_pids.extend(pids)
@@ -224,9 +249,10 @@ def test(model, queryloader, galleryloader, use_gpu, ranks=[1, 5, 10, 20], retur
                 imgs = imgs.cuda()
 
             end = time.time()
-            features = model(imgs)
+            _output = model(imgs)
             batch_time.update(time.time() - end)
 
+            _, _, features = _output
             features = features.data.cpu()
             gf.append(features)
             g_pids.extend(pids)
@@ -244,7 +270,6 @@ def test(model, queryloader, galleryloader, use_gpu, ranks=[1, 5, 10, 20], retur
               torch.pow(gf, 2).sum(dim=1, keepdim=True).expand(n, m).t()
     distmat.addmm_(1, -2, qf, gf.t())
     distmat = distmat.numpy()
-
     print('Computing CMC and mAP')
     # cmc, mAP = evaluate(distmat, q_pids, g_pids, q_camids, g_camids, args.target_names)
     cmc, mAP = evaluate(distmat, q_pids, g_pids, q_camids, g_camids)
