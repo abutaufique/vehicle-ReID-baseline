@@ -151,6 +151,53 @@ class PCBModel(nn.Module):
     if not self.training:
         return local_feat_list, global_feat, flat_feat
 
+class BinPCBModel(nn.Module):
+    def __init__(self, loss, in_channels=2048,
+                 num_classes=575,
+                 layer_cfg=[1024],
+                 relu_cfg=[1],
+                 bn_cfg=[1],
+                 do_cfg=[1],
+                 bias_cfg=[1]
+                ):
+        super(BinPCBModel, self).__init__()
+        self.loss = loss
+        _channels_cfg = [in_channels] + layer_cfg + [num_classes]
+        all_layers = []
+        if layer_cfg:
+            for i in range(len(layer_cfg)):
+                all_layers.append(nn.Conv2d(_channels_cfg[i], _channels_cfg[i+1], 1, bias=True if bias_cfg[i] else False))
+                if relu_cfg[i]:
+                    all_layers.append(nn.ReLU(inplace=True))
+                if bn_cfg[i]:
+                    all_layers.append(nn.BatchNorm2d(_channels_cfg[i+1]))
+                if do_cfg[i]:
+                    all_layers.append(nn.Dropout2d())
+            all_layers.append(nn.Conv2d(_channels_cfg[-2], _channels_cfg[-1], 1))
+        else:
+            all_layers.append(nn.Conv2d(in_channels, num_classes, 1))
+        self.bc = nn.Sequential(*all_layers)
+
+    def forward(self, x):
+        # shape [N, C, H, W]
+        if ('htri' in self.loss) and self.training:
+            all_feat, cls_feat, flat_feat = x
+        elif ('xent' in self.loss) and self.training:
+            all_feat, cls_feat = x
+        else:
+            all_feat, flat_feat = x
+
+        x = all_feat[-1]
+        x = self.bc(x)
+
+        if self.training and 'htri' in self.loss:
+            return flat_feat, cls_feat, x
+        if self.training and 'xent' in self.loss:
+            return cls_feat, x
+
+        return flat_feat
+
+
 if __name__ == '__main__':
     model = PCBModel()
     x = torch.rand(64,256,31,31)

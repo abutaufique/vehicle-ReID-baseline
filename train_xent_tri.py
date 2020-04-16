@@ -150,6 +150,10 @@ def _partloss(criterion, outputs, targets):
     partloss = loss0+loss1+loss2+loss3+loss4+loss5
     return partloss
 
+def _densepartloss(criterion, outputs, targets):
+    loss = [criterion(item, targets) for item in outputs]
+    total_loss = sum(loss)
+    return total_loss
 
 def train(epoch, model, criterion_xent, criterion_htri, optimizer, trainloader, use_gpu):
     xent_losses = AverageMeter()
@@ -171,7 +175,7 @@ def train(epoch, model, criterion_xent, criterion_htri, optimizer, trainloader, 
             imgs, pids = imgs.cuda(), pids.cuda()
 
         #outputs, features = model(imgs)
-        local_feat_list, local_logits_list, outputs, features = model(imgs)
+        local_feat_list, features, outputs = model(imgs)
 
         if isinstance(outputs, (tuple, list)):
             xent_loss = DeepSupervision(criterion_xent, outputs, pids)
@@ -183,7 +187,7 @@ def train(epoch, model, criterion_xent, criterion_htri, optimizer, trainloader, 
         else:
             htri_loss = criterion_htri(features, pids)
 
-        partloss = _partloss(criterion_xent, local_logits_list, pids)
+        partloss = _densepartloss(criterion_xent, local_feat_list, pids)
 
         loss = partloss + args.lambda_xent * xent_loss + args.lambda_htri * htri_loss
 
@@ -230,9 +234,8 @@ def test(model, queryloader, galleryloader, use_gpu, ranks=[1, 5, 10, 20], retur
                 imgs = imgs.cuda()
 
             end = time.time()
-            _output = model(imgs)
+            features = model(imgs)
             batch_time.update(time.time() - end)
-            _, _, features = _output
             features = features.data.cpu()
             qf.append(features)
             q_pids.extend(pids)
@@ -249,10 +252,9 @@ def test(model, queryloader, galleryloader, use_gpu, ranks=[1, 5, 10, 20], retur
                 imgs = imgs.cuda()
 
             end = time.time()
-            _output = model(imgs)
+            features = model(imgs)
             batch_time.update(time.time() - end)
 
-            _, _, features = _output
             features = features.data.cpu()
             gf.append(features)
             g_pids.extend(pids)
